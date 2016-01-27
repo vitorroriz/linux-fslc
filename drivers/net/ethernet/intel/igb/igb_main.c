@@ -251,6 +251,12 @@ static int debug = -1;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,...,16=all)");
 
+static int use_tsn = 0;
+#if IS_ENABLED(CONFIG_IGB_TSN)
+MODULE_PARM_DESC(use_tsn, "use_tsn (0=off, 1=enabled)");
+module_param(use_tsn, int, 0);
+#endif
+
 struct igb_reg_info {
 	u32 ofs;
 	char *name;
@@ -669,6 +675,9 @@ struct net_device *igb_get_hw_dev(struct e1000_hw *hw)
 static int __init igb_init_module(void)
 {
 	int ret;
+
+	if (use_tsn != 1)
+		use_tsn = 0;
 
 	pr_info("%s - version %s\n",
 	       igb_driver_string, igb_driver_version);
@@ -2097,6 +2106,11 @@ static const struct net_device_ops igb_netdev_ops = {
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller	= igb_netpoll,
 #endif
+#if IS_ENABLED(CONFIG_IGB_TSN)
+	.ndo_tsn_capable	= igb_tsn_capable,
+	.ndo_tsn_link_configure = igb_tsn_link_configure,
+	.ndo_select_queue	= igb_tsn_select_queue,
+#endif	/* CONFIG_IGB_TSN */
 	.ndo_fix_features	= igb_fix_features,
 	.ndo_set_features	= igb_set_features,
 	.ndo_features_check	= passthru_features_check,
@@ -2587,6 +2601,9 @@ static int igb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* do hw tstamp init after resetting */
 	igb_ptp_init(adapter);
 
+	if (use_tsn)
+		igb_tsn_init(adapter);
+
 	dev_info(&pdev->dev, "Intel(R) Gigabit Ethernet Network Connection\n");
 	/* print bus type/speed/width info, not applicable to i354 */
 	if (hw->mac.type != e1000_i354) {
@@ -2904,6 +2921,21 @@ static void igb_init_queue_configuration(struct igb_adapter *adapter)
 	}
 
 	adapter->rss_queues = min_t(u32, max_rss_queues, num_online_cpus());
+
+#if IS_ENABLED(CONFIG_IGB_TSN)
+	/* For I210: If we are using TSN, we don't want to use num_online_cpus(),
+	 * as we need 4 Tx-queues.
+	 *
+	 * Rx is another matter, but in time we probably want to assign
+	 * Rx-0 to class A, Rx-1 to B, -2 to PTP/MSRP control etc and -3
+	 * to all other traffic.
+	 */
+	if (use_tsn && hw->mac.type == e1000_i210) {
+		adapter->rss_queues = max_rss_queues;
+		pr_info("igb_init_queue_configuration: rss_queues=%u\n",
+			adapter->rss_queues);
+	}
+#endif	/* IGB_TSN */
 
 	igb_set_flag_queue_pairs(adapter, max_rss_queues);
 }
@@ -3293,7 +3325,8 @@ void igb_configure_tx_ring(struct igb_adapter *adapter,
 	txdctl |= IGB_TX_PTHRESH;
 	txdctl |= IGB_TX_HTHRESH << 8;
 	txdctl |= IGB_TX_WTHRESH << 16;
-
+	if (ring->flags & IGB_FLAG_QAV_PRIO)
+		txdctl |= E1000_TXDCTL_PRIORITY;
 	txdctl |= E1000_TXDCTL_QUEUE_ENABLE;
 	wr32(E1000_TXDCTL(reg_idx), txdctl);
 }
@@ -5102,8 +5135,10 @@ static netdev_tx_t igb_xmit_frame(struct sk_buff *skb,
 	/* The minimum packet size with TCTL.PSP set is 17 so pad the skb
 	 * in order to meet this minimum size requirement.
 	 */
-	if (skb_put_padto(skb, 17))
+	if (skb_put_padto(skb, 17)) {
+		pr_err("%s: skb_put_padto FAILED. skb->len < 17\n", __func__);
 		return NETDEV_TX_OK;
+	}
 
 	return igb_xmit_frame_ring(skb, igb_tx_queue_mapping(adapter, skb));
 }

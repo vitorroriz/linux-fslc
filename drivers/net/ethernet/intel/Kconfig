@@ -109,6 +109,24 @@ config IGB
 	  To compile this driver as a module, choose M here. The module
 	  will be called igb.
 
+config IGB_TSN
+       tristate "TSN Support for Intel(R) 82575/82576 i210 Network Controller"
+       depends on IGB && TSN
+	---help---
+	  This driver supports TSN (AVB) on Intel I210 network controllers.
+
+	  When enabled, it will allow the module to be loaded with
+	  "use_tsn" which will initialize the controller to A/V-mode
+	  instead of legacy-mode. This will take 3 of the tx-queues and
+	  place them in 802.1Q QoS mode and enable the credit-based
+	  shaper for 2 of the queues.
+
+	  If built with this option, but not loaded with use_tsn, the
+	  only difference is a slightly larger module, no extra
+	  code paths are called.
+
+	  If unsure, say No
+
 config IGB_HWMON
 	bool "Intel(R) PCI-Express Gigabit adapters HWMON support"
 	default y
