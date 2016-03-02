@@ -1,0 +1,32 @@
+#
+# Configuration for 802.1 Time Sensitive Networking (TSN)
+#
+
+config TSN
+	tristate "802.1 TSN Support"
+	depends on VLAN_8021Q && PTP_1588_CLOCK && CONFIGFS_FS
+	---help---
+	  Select this if you want to enable TSN on capable interfaces.
+
+	  TSN allows you to set up deterministic links on your LAN (only
+	  L2 is currently supported). Once loaded, the driver will probe
+	  all available interfaces if they are capable of supporting TSN
+	  links.
+
+	  Once loaded, a directory in configfs called tsn/ will expose
+	  the capable NICs and allow userspace to create
+	  links. Userspace must provide us with a StreamID as well as
+	  reserving bandwidth through the network and once this is done,
+	  a new link can be created by issuing a mkdir() in configfs and
+	  updating the attributes for the new link.
+
+	  TSN itself does not produce nor consume data, it is dependent
+	  upon 'shims' doing this, which can be virtually anything. ALSA
+	  is a good candidate.
+
+	  For more information, refer to the TSN-documentation in the
+	  kernel documentation repository.
+
+	  The resulting module will be called 'tsn'
+
+	  If unsure, say N.
