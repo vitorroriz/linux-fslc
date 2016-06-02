@@ -30,4 +30,4 @@ obj-y += rc/
 
 obj-y += common/ platform/ pci/ usb/ mmc/ firewire/
 obj-$(CONFIG_VIDEO_DEV) += radio/
-
+obj-$(CONFIG_MEDIA_AVB_ALSA) += avb/
